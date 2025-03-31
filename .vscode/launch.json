@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:swift-linux-issue}",
+      "name": "Debug swift-linux-issue",
+      "program": "${workspaceFolder:swift-linux-issue}/.build/debug/swift-linux-issue",
+      "preLaunchTask": "swift: Build Debug swift-linux-issue"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:swift-linux-issue}",
+      "name": "Release swift-linux-issue",
+      "program": "${workspaceFolder:swift-linux-issue}/.build/release/swift-linux-issue",
+      "preLaunchTask": "swift: Build Release swift-linux-issue"
+    }
+  ]
+}
