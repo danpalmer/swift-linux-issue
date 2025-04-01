@@ -1,16 +1,16 @@
 // main.swift
 import Foundation
 #if os(Linux)
-    import Glibc
+    @preconcurrency import Glibc
 #else
-    import Darwin.C
+    @preconcurrency import Darwin.C
 #endif
 
 // Debug printing util that flushes immediately.
 // The hang on Linux prevents print output from making it to stdout.
 func debug(_ message: String, terminator: String = "\n") {
     print(message, terminator: terminator)
-    fflush(stdout)
+    // fflush(stdout)
 }
 
 // Helper to read from a file handle asynchronously.
@@ -27,6 +27,7 @@ extension FileHandle {
             }
 
             self.readabilityHandler = { handle in
+                debug("[Debug] FileHandle (\(handle.fileDescriptor)) received callback.")
                 let data = handle.availableData
                 if data.isEmpty {
                     debug("[Debug] FileHandle (\(handle.fileDescriptor)) received empty data, finishing stream.")
@@ -42,16 +43,14 @@ extension FileHandle {
     }
 }
 
-@main
-struct Reproducer {
-    static func main() async {
+struct RawReproduction {
+    static func run() async {
         debug("Starting reproduction.")
 
-        let arguments = ["/bin/ls", "-la", "."]
+        let arguments = ["/bin/echo", "Hello, World!"]
 
         let process = Process()
         let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
 
         guard let executableURL = URL(string: "file:///bin/ls") else {
             debug("Error: Could not create executable URL.")
@@ -60,7 +59,7 @@ struct Reproducer {
         process.executableURL = executableURL
         process.arguments = Array(arguments.dropFirst())
         process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+        process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
 
         debug("Process configured. Setting up async readers...")
@@ -75,25 +74,10 @@ struct Reproducer {
                         debug("[Stdout] \(str)", terminator: "")
                     }
                 }
+                // This is never printed.
                 debug("[Stdout Task] Finished reading \(byteCount) bytes.")
             } catch {
                 debug("[Stdout Task] Error reading stream: \(error)")
-            }
-        }
-
-        let stderrTask = Task {
-            var byteCount = 0
-            debug("[Stderr Task] Started.")
-            do {
-                for try await data in stderrPipe.fileHandleForReading.byteStream() {
-                    byteCount += data.count
-                    if let str = String(data: data, encoding: .utf8) {
-                         debug("[Stderr] \(str)", terminator: "")
-                    }
-                }
-                debug("[Stderr Task] Finished reading \(byteCount) bytes.")
-            } catch {
-                debug("[Stderr Task] Error reading stream: \(error)")
             }
         }
 
@@ -111,16 +95,14 @@ struct Reproducer {
             debug("Error running process: \(error)")
             // Ensure tasks are cleaned up on error
             stdoutTask.cancel()
-            stderrTask.cancel()
         }
 
         debug("Awaiting stdout reader task completion...")
+
+        // This is where the program hangs indefinitely on Linux.
         await stdoutTask.value
-        debug("Awaiting stderr reader task completion...")
-        await stderrTask.value
 
         try? stdoutPipe.fileHandleForReading.close()
-        try? stderrPipe.fileHandleForReading.close()
 
         debug("Program finished.")
     }
